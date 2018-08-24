@@ -27,6 +27,7 @@ module.exports = {
   },
   plugins: [
     new webpack.HotModuleReplacementPlugin(),
+    new webpack.EnvironmentPlugin({ FASTLY_KEY: '' }),
   ],
   devServer: {
     contentBase: './dist',
