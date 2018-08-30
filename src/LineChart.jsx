@@ -1,111 +1,156 @@
+// @flow
+
 import React from 'react';
 import { connect } from 'react-redux';
-import { VictoryChart, VictoryTheme, VictoryLine, VictoryLegend } from 'victory';
+import { Line } from 'react-chartjs-2';
+import moment from 'moment';
+import type { ServiceStats } from './fastly-api';
+import { groupBy, flatten, sum } from './array-utils';
 
-function LineChart(props) {
+function formatMillis(n: number) {
+  return moment(n * 1000).format('YYYY-MM-DD');
+}
 
-  return (
-    <VictoryLine
-      style={{
-        data: { stroke: '#c43a31' },
-        parent: { border: '1px solid #ccc' },
-      }}
-      data={props.data}
-    />
+function aggregateStat(arr: ServiceStats[], fn: ServiceStats => number): Map<string, number> {
+  return Array.from(groupBy(arr, _ => _.start_time.toString())).reduce(
+    (acc, [k, v]) => acc.set(k, sum(v, fn)),
+    (new Map(): Map<string, number>),
   );
 }
 
-function colours(i: number) {
-  const colourList = [
-    '#e6194b',
-    '#3cb44b',
-    '#ffe119',
-    '#0082c8',
-    '#f58231',
-    '#911eb4',
-    '#46f0f0',
-    '#f032e6',
-    '#d2f53c',
-    '#fabebe',
-    '#008080',
-    '#e6beff',
-    '#aa6e28',
-    '#fffac8',
-    '#800000',
-    '#aaffc3',
-    '#808000',
-    '#ffd8b1',
-    '#000080',
-    '#808080',
-    '#FFFFFF',
-    '#000000',
-  ];
+const colourList = [
+  [230, 25, 75],
+  [60, 180, 75],
+  [255, 225, 25],
+  [0, 130, 200],
+  [245, 130, 49],
+  [145, 30, 180],
+  [70, 240, 240],
+  [240, 50, 230],
+  [210, 245, 60],
+  [250, 190, 190],
+  [0, 128, 128],
+  [230, 190, 255],
+  [170, 110, 40],
+  [255, 250, 200],
+  [128, 0, 0],
+  [170, 255, 195],
+  [128, 128, 0],
+  [255, 216, 177],
+  [0, 0, 128],
+  [128, 128, 128],
+  [255, 0, 255],
+  [0, 0, 0],
+];
 
-  return colourList[i % colourList.length];
+function getColour(index, alpha) {
+  const c = colourList[index];
+  return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha})`;
 }
 
-function LineCharts(props) {
-
-  let propsData = props.data ? props.data : {};
-  let services = props.services ? props.services : new Map();
-
-  const legendData = Object.entries(propsData).map((service, i) => {
-    return { name: services.get(service[0]), symbol: { fill: colours(i) } }
-  });
-
-  return (
-    <div>
-      <div style={{ width: 1600, height: 800, border: '1px solid red' }}>
-        <VictoryChart theme={VictoryTheme.material} y={0} scale={{ x: 'time' }} width={800} height={600}>
-          <VictoryLegend
-            x={800}
-            y={0}
-            title="Legend"
-            centerTitle
-            orientation="vertical"
-            gutter={0}
-            style={{
-              border: { stroke: 'black' },
-              labels: { fontSize: 5 },
-              title: { fontSize: 5 },
-            }}
-            data={legendData}
-          />
-        {
-          Object.entries(propsData).map((service, i) => {
-            const data = service[1].map((datum) => {
-              return {
-                x: new Date(datum.start_time),
-                y: datum.requests,
-              };
-            });
-            return (
-              <VictoryLine
-                key={service[0]}
-                style={{
-                  data: { stroke: colours(i) },
-                  parent: { border: '1px solid #ccc' },
-                }}
-                data={data}
-              />
-            );
-          })
-        }
-        </VictoryChart>
-      </div>
-    </div>
-  );
-}
-
-// export default LineChart;
-
-function mapStateToProps(state) {
+function createDataSet(key, data: number[], area: boolean, index: number): Object {
+  const colourIndex = index % colourList.length;
   return {
-    data: state.data,
-    services: state.services,
+    label: key,
+    fill: area,
+    lineTension: 0.1,
+    backgroundColor: getColour(colourIndex, 0.4),
+    borderColor: getColour(colourIndex, 1),
+    borderCapStyle: 'butt',
+    borderDash: [],
+    borderDashOffset: 0.0,
+    borderJoinStyle: 'miter',
+    pointBorderColor: getColour(colourIndex, 1),
+    pointBackgroundColor: '#fff',
+    pointBorderWidth: 1,
+    pointHoverRadius: 5,
+    pointHoverBackgroundColor: getColour(colourIndex, 1),
+    pointHoverBorderColor: 'rgba(220,220,220,1)',
+    pointHoverBorderWidth: 2,
+    pointRadius: 1,
+    pointHitRadius: 10,
+    data,
   };
 }
 
-const ConnectedCharts = connect(mapStateToProps)(LineCharts);
+function getLabels(data: {| [string]: ServiceStats[] |}): string[] {
+  const values = ((Array.from(Object.values(data)): any): ServiceStats[][]);
+  return Array.from(groupBy(flatten(values), _ => _.start_time.toString()).keys()).sort();
+}
 
-export { ConnectedCharts };
+type PropTypes = {
+  groupings: { [string]: string },
+  stats: {| [string]: ServiceStats[] |},
+  services: Map<string, string>,
+  area: boolean,
+}
+
+function BaseGroupedChart({
+  groupings = {}, stats = {}, services = new Map(), area,
+}: PropTypes) {
+
+  const labels = getLabels(stats);
+
+  const flattenedStats: ServiceStats[] = flatten(((Object.values(stats): any): ServiceStats[][]));
+
+  const groupedStats: Map<string, ServiceStats[]> = groupBy(
+    flattenedStats,
+    _ => groupings[_.service_id] || services.get[_.service_id] || 'unknown service',
+  );
+
+  const datasets: Object[] = Array.from(groupedStats).map(
+    ([key, value], i) => {
+      const aggregated = aggregateStat(value, _ => _.bandwidth);
+      return createDataSet(key, labels.map(l => (aggregated.get(l) || 0) / 1000000000000), area, i);
+    },
+  );
+
+  const chartData = {
+    labels: labels.map(item => formatMillis(parseInt(item, 10))),
+    datasets,
+  };
+
+  const options = {
+    responsive: true,
+    title: {
+      display: true,
+      text: 'Fastly bandwidth - last 28 days',
+    },
+    tooltips: {
+      mode: 'index',
+    },
+    hover: {
+      mode: 'index',
+    },
+    scales: {
+      xAxes: [{
+        scaleLabel: {
+          display: true,
+          labelString: 'Day',
+        },
+      }],
+      yAxes: [{
+        stacked: area,
+        scaleLabel: {
+          display: true,
+          labelString: 'Bandwidth (TB)',
+        },
+      }],
+    },
+  };
+
+  return (<Line data={chartData} options={options} />);
+}
+
+function mapStateToProps(state) {
+  return {
+    stats: state.stats,
+    services: state.services,
+    groupings: state.groupings,
+    area: !!state.area,
+  };
+}
+
+const GroupedChart = connect(mapStateToProps)(BaseGroupedChart);
+
+export { GroupedChart };
