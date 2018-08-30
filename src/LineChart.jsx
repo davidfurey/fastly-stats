@@ -3,6 +3,7 @@
 import React from 'react';
 import { connect } from 'react-redux';
 import { Line } from 'react-chartjs-2';
+import type { ChartData } from 'react-chartjs-2';
 import moment from 'moment';
 import type { ServiceStats } from './fastly-api';
 import { groupBy, flatten, sum } from './array-utils';
@@ -78,16 +79,12 @@ function getLabels(data: {| [string]: ServiceStats[] |}): string[] {
   return Array.from(groupBy(flatten(values), _ => _.start_time.toString()).keys()).sort();
 }
 
-type PropTypes = {
-  groupings: { [string]: string },
+function groupedDatasets(
   stats: {| [string]: ServiceStats[] |},
-  services: Map<string, string>,
   area: boolean,
-}
-
-function BaseGroupedChart({
-  groupings = {}, stats = {}, services = new Map(), area,
-}: PropTypes) {
+  groupingFunction: string => string,
+  dataExtractor: ServiceStats => number,
+): ChartData {
 
   const labels = getLabels(stats);
 
@@ -95,26 +92,54 @@ function BaseGroupedChart({
 
   const groupedStats: Map<string, ServiceStats[]> = groupBy(
     flattenedStats,
-    _ => groupings[_.service_id] || services.get[_.service_id] || 'unknown service',
+    _ => groupingFunction(_.service_id),
   );
 
-  const datasets: Object[] = Array.from(groupedStats).map(
+  const datasets = Array.from(groupedStats).map(
     ([key, value], i) => {
-      const aggregated = aggregateStat(value, _ => _.bandwidth);
-      return createDataSet(key, labels.map(l => (aggregated.get(l) || 0) / 1000000000000), area, i);
+      const aggregated = aggregateStat(value, dataExtractor);
+      return createDataSet(key, labels.map(l => (aggregated.get(l) || 0)), area, i);
     },
   );
 
-  const chartData = {
+  return {
     labels: labels.map(item => formatMillis(parseInt(item, 10))),
     datasets,
   };
+}
+
+type PropTypes = {
+  title: string,
+  yAxis: string,
+  dataExtractor: ServiceStats => number,
+  groupings: { [string]: string },
+  stats: {| [string]: ServiceStats[] |},
+  services: Map<string, string>,
+  area: boolean,
+}
+
+function BaseGroupedChart({
+  title,
+  yAxis,
+  dataExtractor,
+  groupings,
+  stats,
+  services,
+  area,
+}: PropTypes) {
+
+  const chartData = groupedDatasets(
+    stats,
+    area,
+    _ => groupings[_] || services.get[_] || 'unknown service',
+    dataExtractor,
+  );
 
   const options = {
     responsive: true,
     title: {
       display: true,
-      text: 'Fastly bandwidth - last 28 days',
+      text: title,
     },
     tooltips: {
       mode: 'index',
@@ -133,7 +158,7 @@ function BaseGroupedChart({
         stacked: area,
         scaleLabel: {
           display: true,
-          labelString: 'Bandwidth (TB)',
+          labelString: yAxis,
         },
       }],
     },
@@ -147,7 +172,7 @@ function mapStateToProps(state) {
     stats: state.stats,
     services: state.services,
     groupings: state.groupings,
-    area: !!state.area,
+    area: state.area,
   };
 }
 

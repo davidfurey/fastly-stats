@@ -4,7 +4,7 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { Provider } from 'react-redux';
 import { createStore } from 'redux';
-import { statsByField, services } from './fastly-api';
+import { stats, services } from './fastly-api';
 import { GroupedChart } from './LineChart';
 import { groupings } from './fastly-groupings';
 import {
@@ -28,7 +28,10 @@ services().then((serviceList) => {
   store.dispatch(setServices(new Map(serviceList.map(item => [item.id, item.name]))));
 });
 
-statsByField('bandwidth', '2 months ago', 'day').then(json => store.dispatch(setStats(json.data)));
+// statsByField('bandwidth', '2 months ago', 'day')
+// .then(json => store.dispatch(setStats(json.data)));
+
+stats('2 months ago', 'day').then(json => store.dispatch(setStats(json.data)));
 
 store.dispatch(setGroupings(groupings));
 
@@ -39,7 +42,21 @@ if (element) {
     (
       <Provider store={store}>
         <div>
-          <GroupedChart />
+          <GroupedChart
+            title="Fastly bandwidth - last 28 days"
+            yAxis="Bandwidth (TB)"
+            dataExtractor={_ => _.bandwidth / 1000000000000}
+          />
+          <GroupedChart
+            title="Fastly requests - last 28 days"
+            yAxis="Requests (million)"
+            dataExtractor={_ => _.requests / 1000000}
+          />
+          <GroupedChart
+            title="Fastly cost estimate - last 28 days"
+            yAxis="Cost ($)"
+            dataExtractor={_ => _.bandwidth * 0.05 / 1000000000}
+          />
           <p>
             <label htmlFor="stack-switch">
               <input

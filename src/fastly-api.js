@@ -66,9 +66,17 @@ function statsByField(
   return fetch(`${hostname}/stats/field/${field}?from=${from}&by=${by}`, requestData).then(response => response.json());
 }
 
+function stats(
+  from: string,
+  by: string,
+): Promise<FastlyStats> {
+
+  return fetch(`${hostname}/stats?from=${from}&by=${by}`, requestData).then(response => response.json());
+}
+
 function services(): Promise<FastlyService[]> {
 
   return fetch(`${hostname}/service`, requestData).then(response => response.json());
 }
 
-export { statsByField, services };
+export { statsByField, services, stats };
