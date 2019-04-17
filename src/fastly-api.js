@@ -1,6 +1,6 @@
 // @flow
 
-const debug = true;
+const debug = false;
 
 export type ServiceStats = {
   service_id: string,
@@ -49,34 +49,39 @@ type FastlyService = {
 
 const hostname = debug ? 'http://localhost:8000' : 'https://api.fastly.com';
 
-const requestData = debug ? {
-  method: 'GET',
-} : {
-  method: 'GET',
-  headers: { 'Fastly-Key': process.env.FASTLY_KEY || '' },
-};
+// process.env.FASTLY_KEY
+function requestData(key: string) {
+  return debug ? {
+    method: 'GET',
+  } : {
+    method: 'GET',
+    headers: { 'Fastly-Key': key },
+  };
+}
 
 
 function statsByField(
   field: string,
   from: string,
   by: string,
+  key: string,
 ): Promise<FastlyStats> {
 
-  return fetch(`${hostname}/stats/field/${field}?from=${from}&by=${by}`, requestData).then(response => response.json());
+  return fetch(`${hostname}/stats/field/${field}?from=${from}&by=${by}`, requestData(key)).then(response => response.json());
 }
 
 function stats(
   from: string,
   by: string,
+  key: string,
 ): Promise<FastlyStats> {
 
-  return fetch(`${hostname}/stats?from=${from}&by=${by}`, requestData).then(response => response.json());
+  return fetch(`${hostname}/stats?from=${from}&by=${by}`, requestData(key)).then(response => response.json());
 }
 
-function services(): Promise<FastlyService[]> {
+function services(key: string): Promise<FastlyService[]> {
 
-  return fetch(`${hostname}/service`, requestData).then(response => response.json());
+  return fetch(`${hostname}/service`, requestData(key)).then(response => response.json());
 }
 
 export { statsByField, services, stats };

@@ -126,6 +126,7 @@ function BaseGroupedChart({
   stats,
   services,
   area,
+  fastlyKey,
 }: PropTypes) {
 
   const chartData = groupedDatasets(
@@ -133,6 +134,7 @@ function BaseGroupedChart({
     area,
     _ => groupings[_] || services.get[_] || 'unknown service',
     dataExtractor,
+    fastlyKey,
   );
 
   const options = {
